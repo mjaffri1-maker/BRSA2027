@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Award Evaluation Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- html2pdf.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        html {
+            font-size: 110%; /* Increases overall font scale by 10% */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #000000;
+        }
+        
+        /* Custom range slider styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 22px;
+            width: 22px;
+            border-radius: 50%;
+            background: #0a84ff; /* Apple System Blue */
+            cursor: pointer;
+            margin-top: -9px;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 3px 6px rgba(0,0,0,0.4);
+            transition: transform 0.1s ease, background 0.15s ease-in-out;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            background: #007aff;
+            transform: scale(1.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #3a3a3c;
+            border-radius: 9999px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]:focus::-webkit-slider-runnable-track {
+            background: #48484a;
+        }
+
+        /* Loading Spinner */
+        .loader {
+            border: 3px solid #3a3a3c;
+            border-radius: 50%;
+            border-top: 3px solid #ffffff;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* HTML2PDF specific styling - ensures crisp rendering */
+        .pdf-container {
+            background-color: #1c1c1e !important;
+            color: #ffffff !important;
+        }
+    </style>
+</head>
+<body class="text-gray-100 antialiased py-8 px-4 sm:px-6 lg:px-8 flex justify-center min-h-screen">
+
+    <!-- Toast Notification (Hidden by default) -->
+    <div id="toast" class="fixed top-5 right-5 z-50 transform transition-all duration-300 translate-y-[-150%] opacity-0 bg-[#2c2c2e] border border-[#3a3a3c] text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3">
+        <i class="fas fa-check-circle text-2xl text-[#32d74b]"></i>
+        <div>
+            <h4 class="font-bold text-sm tracking-wide">Success</h4>
+            <p class="text-xs text-gray-400" id="toast-message">Assessment submitted successfully.</p>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="w-full max-w-6xl space-y-6">
+        
+        <!-- Header -->
+        <header class="bg-[#1c1c1e] rounded-3xl shadow-lg p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center border border-[#2c2c2e]">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">Biotech Rising Star Award</h1>
+                <p class="text-gray-400 mt-1 text-sm sm:text-base font-medium">Real-time candidate assessment & scoring dashboard</p>
+            </div>
+            <div class="mt-4 sm:mt-0 flex flex-col sm:flex-row items-center gap-4">
+                <button id="btn-config" type="button" title="Configure Google Sheets Webhook" class="px-3.5 py-2 rounded-xl bg-[#2c2c2e] hover:bg-[#3a3a3c] text-gray-300 text-xs font-semibold border border-[#3a3a3c] transition-all inline-flex items-center gap-2">
+                    <i class="fas fa-table text-[#32d74b]"></i> Sheet Webhook
+                </button>
+                <div class="flex flex-col items-center sm:items-end space-y-2">
+                    <div id="trophy-badge" class="h-14 w-14 rounded-full bg-[#8e8e93]/15 text-[#8e8e93] flex items-center justify-center text-2xl shadow-inner border border-[#8e8e93]/30 transition-all duration-300">
+                        <i class="fas fa-trophy"></i>
+                    </div>
+                    <div class="flex flex-col items-center sm:items-end gap-1.5">
+                        <span id="category-badge" class="text-xs font-semibold px-3 py-1 rounded-full bg-[#2c2c2e] text-gray-400 border border-[#3a3a3c] transition-all duration-300">
+                            Does Not Meet Criteria
+                        </span>
+                        <span id="recommended-badge" class="hidden text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#32d74b]/15 text-[#32d74b] border border-[#32d74b]/30 tracking-wide inline-flex items-center gap-1 shadow-sm">
+                            <i class="fas fa-star text-[10px]"></i> Highly Recommended
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Printable Area Container -->
+        <div id="assessment-content" class="pdf-container bg-[#1c1c1e] rounded-3xl shadow-xl border border-[#2c2c2e] overflow-hidden">
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-[#2c2c2e]">
+                
+                <!-- Left Column: Form -->
+                <div class="p-6 sm:p-8">
+                    <h2 class="text-lg font-semibold text-white mb-6 flex items-center">
+                        <i class="fas fa-user-edit text-[#0a84ff] mr-3"></i> Evaluation Details
+                    </h2>
+                    
+                    <form id="evaluation-form" class="space-y-6">
+                        <!-- Candidate & Evaluator Info -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1.5 ml-1">Candidate Name</label>
+                                <input type="text" id="candidateName" required placeholder="e.g. Jane Doe" class="w-full px-4 py-3 bg-[#2c2c2e] border border-transparent rounded-xl focus:ring-2 focus:ring-[#0a84ff] focus:outline-none transition-all text-sm text-white placeholder-gray-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-1.5 ml-1">Evaluator Name</label>
+                                <input type="text" id="evaluatorName" required placeholder="Your Name" class="w-full px-4 py-3 bg-[#2c2c2e] border border-transparent rounded-xl focus:ring-2 focus:ring-[#0a84ff] focus:outline-none transition-all text-sm text-white placeholder-gray-500">
+                            </div>
+                        </div>
+
+                        <hr class="border-[#2c2c2e]">
+
+                        <!-- Scoring Parameters -->
+                        <div class="space-y-5" id="sliders-container">
+                            <!-- Sliders injected by JS -->
+                        </div>
+
+                        <hr class="border-[#2c2c2e]">
+
+                        <!-- Comments -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-1.5 ml-1">General Comments / Feedback</label>
+                            <textarea id="comments" rows="3" placeholder="Provide constructive feedback here..." class="w-full px-4 py-3 bg-[#2c2c2e] border border-transparent rounded-xl focus:ring-2 focus:ring-[#0a84ff] focus:outline-none transition-all text-sm text-white placeholder-gray-500 resize-none"></textarea>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Right Column: Radar Chart -->
+                <div class="p-6 sm:p-8 bg-black/40 flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-lg font-semibold text-white flex items-center">
+                            <i class="fas fa-chart-radar text-[#0a84ff] mr-3"></i> Performance Overview
+                        </h2>
+                        <div class="bg-[#0a84ff]/20 text-[#0a84ff] border border-[#0a84ff]/30 text-xs font-bold px-3 py-1.5 rounded-full inline-flex items-center">
+                            Total: <span id="total-score" class="ml-1 text-sm">0</span>/100
+                        </div>
+                    </div>
+                    
+                    <!-- Canvas Container -->
+                    <div class="flex-grow flex items-center justify-center min-h-[300px] w-full relative">
+                        <!-- Wrapper to control chart size responsiveness cleanly -->
+                        <div class="w-full max-w-[400px] aspect-square relative">
+                            <canvas id="radarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4">
+            <button id="btn-download" class="flex items-center justify-center px-6 py-3.5 bg-[#2c2c2e] border-0 text-white font-medium rounded-xl hover:bg-[#3a3a3c] transition-all focus:outline-none focus:ring-2 focus:ring-[#3a3a3c] shadow-lg">
+                <i class="fas fa-file-pdf mr-2 text-[#ff453a]"></i> Download PDF
+            </button>
+            <button id="btn-submit" class="flex items-center justify-center px-6 py-3.5 bg-[#0a84ff] border border-transparent text-white font-medium rounded-xl hover:bg-[#007aff] transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-[#0a84ff] shadow-lg shadow-[#0a84ff]/20">
+                <span id="btn-submit-text"><i class="fas fa-paper-plane mr-2"></i> Submit Assessment</span>
+                <div id="btn-submit-loader" class="loader ml-2 hidden"></div>
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Webhook Configuration Modal -->
+    <div id="config-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-[#1c1c1e] border border-[#3a3a3c] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fas fa-plug text-[#0a84ff]"></i> Google Sheet Endpoint
+                </h3>
+                <button id="btn-close-modal" class="text-gray-400 hover:text-white text-lg">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <p class="text-xs text-gray-400 mb-4 leading-relaxed">
+                Paste your deployed Google Apps Script Web App URL below. When evaluators click "Submit Assessment", their marks and feedback will be posted to this endpoint.
+            </p>
+            <div class="mb-5">
+                <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">Web App URL</label>
+                <input type="url" id="googleScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" 
+                    value="https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec"
+                    class="w-full px-4 py-3 bg-[#2c2c2e] border border-[#3a3a3c] rounded-xl text-white text-xs focus:ring-2 focus:ring-[#0a84ff] focus:outline-none">
+            </div>
+            <div class="flex justify-end gap-3">
+                <button id="btn-save-modal" class="px-5 py-2.5 bg-[#0a84ff] hover:bg-[#007aff] text-white text-xs font-semibold rounded-xl transition-all">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- 1. Configuration & Data ---
+            const parameters = [
+                { 
+                    id: 'scientific', label: 'Scientific Excellence', max: 30, default: 15,
+                    indicators: 'Novelty of research question; experimental design; controls; data quality',
+                    high: '25-30: Original hypothesis; rigorous design; strong controls; reproducible data; in-depth interpretation',
+                    mid: '15-24: Moderate originality; acceptable design; partial controls; data show moderate consistency; moderate interpretation',
+                    low: '0-14: Weak question; flawed design; poor controls; low-quality data; incorrect interpretation'
+                },
+                { 
+                    id: 'innovation', label: 'Innovation & Creativity', max: 20, default: 10,
+                    indicators: 'New methods, conceptual advances, cross-disciplinary integration',
+                    high: '16-20: Clear novelty; creative approach; introduces or adapts methods meaningfully',
+                    mid: '8-15: Some adaptation of existing approaches; moderate creativity',
+                    low: '0-7: Routine work; no clear innovation'
+                },
+                { 
+                    id: 'impact', label: 'Research Impact & IP', max: 20, default: 10,
+                    indicators: 'Translational value; societal relevance; patents/IP, publications, prototypes',
+                    high: '16-20: Strong real-world relevance; clear application pathway; IP filed/granted; Q1/Q2 journal',
+                    mid: '8-15: Potential impact; early-stage IP; Q3/Q4 journal',
+                    low: '0-7: Minimal impact; no evidence of IP or journal awareness'
+                },
+                { 
+                    id: 'communication', label: 'Communication Excellence', max: 15, default: 7,
+                    indicators: 'Clarity, structure, figures, Q&A performance',
+                    high: '12-15: Clear, logical narrative; high-quality visuals; handles questions with depth',
+                    mid: '6-11: Understandable but lacks clarity/flow; visuals adequate',
+                    low: '0-5: Disorganized; unclear visuals; weak responses'
+                },
+                { 
+                    id: 'development', label: 'Academic & Prof. Development', max: 5, default: 2,
+                    indicators: 'Skills, training, interdisciplinary exposure, ethics',
+                    high: '4-5: Strong evidence of continuous learning and ethical awareness',
+                    mid: '2-3: Some additional development',
+                    low: '0-1: Minimal development'
+                },
+                { 
+                    id: 'potential', label: 'Future Potential', max: 10, default: 5,
+                    indicators: 'Vision, trajectory, feasibility',
+                    high: '8-10: Clear, ambitious, and realistic trajectory; strong potential',
+                    mid: '4-7: General plans without strong direction',
+                    low: '0-3: Vague or unrealistic future outlook'
+                }
+            ];
+
+            // --- 2. DOM Elements Construction ---
+            const slidersContainer = document.getElementById('sliders-container');
+            const totalScoreEl = document.getElementById('total-score');
+            const trophyBadge = document.getElementById('trophy-badge');
+            const categoryBadge = document.getElementById('category-badge');
+            const recommendedBadge = document.getElementById('recommended-badge');
+            const inputElements = {};
+            const numInputElements = {};
+
+            parameters.forEach((param, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'mb-6 p-5 bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl shadow-sm transition-colors hover:bg-[#242426]';
+                wrapper.innerHTML = `
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 space-y-2 sm:space-y-0">
+                        <div class="flex-1 pr-4">
+                            <label for="${param.id}" class="block text-sm font-semibold text-white tracking-wide">${param.label}</label>
+                            <p class="text-xs text-gray-400 mt-1">${param.indicators}</p>
+                        </div>
+                        <div class="flex items-center space-x-2 bg-[#2c2c2e] p-1.5 rounded-xl border border-[#3a3a3c]">
+                            <input type="number" id="num-${param.id}" min="0" max="${param.max}" value="${param.default}" 
+                                class="w-16 px-2 py-1.5 text-center font-bold text-[#0a84ff] bg-transparent border-none focus:ring-0 focus:outline-none">
+                            <span class="text-sm font-bold text-gray-500 pr-2">/ ${param.max}</span>
+                        </div>
+                    </div>
+                    
+                    <input type="range" id="${param.id}" min="0" max="${param.max}" value="${param.default}" class="w-full mb-4">
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[10px] leading-relaxed">
+                        <div class="bg-[#32d74b]/10 p-2.5 rounded-xl border border-[#32d74b]/20 text-[#32d74b]">
+                            <strong class="block mb-1 text-[#32d74b] opacity-90">High Range</strong> ${param.high}
+                        </div>
+                        <div class="bg-[#ffd60a]/10 p-2.5 rounded-xl border border-[#ffd60a]/20 text-[#ffd60a]">
+                            <strong class="block mb-1 text-[#ffd60a] opacity-90">Mid Range</strong> ${param.mid}
+                        </div>
+                        <div class="bg-[#ff453a]/10 p-2.5 rounded-xl border border-[#ff453a]/20 text-[#ff453a]">
+                            <strong class="block mb-1 text-[#ff453a] opacity-90">Low Range</strong> ${param.low}
+                        </div>
+                    </div>
+                `;
+                slidersContainer.appendChild(wrapper);
+                inputElements[param.id] = document.getElementById(param.id);
+                numInputElements[param.id] = document.getElementById(`num-${param.id}`);
+            });
+
+            // --- 3. Chart.js Initialization ---
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            
+            // Store normalized percentages for the chart visual (so a 5/5 looks visually equal to a 30/30)
+            const initialChartData = parameters.map(p => (p.default / p.max) * 100);
+
+            const radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: parameters.map(p => p.label.split(' ')), // Split for multiline labels
+                    datasets: [{
+                        label: 'Candidate Score',
+                        data: initialChartData,
+                        backgroundColor: 'rgba(10, 132, 255, 0.25)', // Apple System Blue with opacity
+                        borderColor: 'rgba(10, 132, 255, 1)',
+                        pointBackgroundColor: 'rgba(10, 132, 255, 1)',
+                        pointBorderColor: '#1c1c1e',
+                        pointHoverBackgroundColor: '#ffffff',
+                        pointHoverBorderColor: 'rgba(10, 132, 255, 1)',
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        borderWidth: 2,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            min: 0,
+                            max: 100, // Normalized to 100%
+                            ticks: {
+                                stepSize: 20,
+                                display: false, // Hide percentage ticks for cleaner look
+                                backdropColor: 'transparent'
+                            },
+                            grid: { color: '#3a3a3c' },
+                            angleLines: { color: '#3a3a3c' },
+                            pointLabels: {
+                                color: '#8e8e93',
+                                font: {
+                                    family: "-apple-system, BlinkMacSystemFont, 'Inter', sans-serif",
+                                    size: 11,
+                                    weight: '500'
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(28, 28, 30, 0.95)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#e5e5ea',
+                            borderColor: '#3a3a3c',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: (context) => {
+                                    const paramIndex = context.dataIndex;
+                                    const p = parameters[paramIndex];
+                                    const rawVal = inputElements[p.id].value;
+                                    return `Score: ${rawVal} / ${p.max}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // --- 4. Interactivity & Synchronization ---
+            const updateAwardCategory = (score) => {
+                // Reset common base classes
+                trophyBadge.className = 'h-14 w-14 rounded-full flex items-center justify-center text-2xl transition-all duration-300 ';
+                categoryBadge.className = 'text-xs font-semibold px-3 py-1 rounded-full transition-all duration-300 ';
+
+                if (score < 51) {
+                    // (1) Does not meet criteria (<50%)
+                    trophyBadge.className += 'bg-[#8e8e93]/15 text-[#8e8e93] border border-[#8e8e93]/30';
+                    categoryBadge.className += 'bg-[#2c2c2e] text-[#8e8e93] border border-[#3a3a3c]';
+                    categoryBadge.textContent = 'Does Not Meet Criteria';
+                } else if (score <= 75) {
+                    // (2) Bronze (51 - 75%)
+                    trophyBadge.className += 'bg-[#cd7f32]/25 text-[#f5a762] border border-[#cd7f32]/50 shadow-[0_0_18px_rgba(205,127,50,0.35)]';
+                    categoryBadge.className += 'bg-[#cd7f32]/20 text-[#f5a762] border border-[#cd7f32]/40';
+                    categoryBadge.textContent = 'Bronze Award';
+                } else if (score <= 85) {
+                    // (3) Silver (76 - 85%)
+                    trophyBadge.className += 'bg-[#e5e5ea]/25 text-[#f2f2f7] border border-[#e5e5ea]/60 shadow-[0_0_18px_rgba(255,255,255,0.3)]';
+                    categoryBadge.className += 'bg-[#e5e5ea]/20 text-[#f2f2f7] border border-[#e5e5ea]/40';
+                    categoryBadge.textContent = 'Silver Award';
+                } else {
+                    // (4) Gold (86 - 100%)
+                    trophyBadge.className += 'bg-[#ffd60a]/20 text-[#ffd60a] border border-[#ffd60a]/60 shadow-[0_0_20px_rgba(255,214,10,0.4)]';
+                    categoryBadge.className += 'bg-[#ffd60a]/20 text-[#ffd60a] border border-[#ffd60a]/40';
+                    categoryBadge.textContent = 'Gold Award';
+                }
+
+                // Extra label: Above 89% -> Highly Recommended
+                if (score > 89) {
+                    recommendedBadge.classList.remove('hidden');
+                } else {
+                    recommendedBadge.classList.add('hidden');
+                }
+            };
+
+            const updateDashboard = (sourceEvent) => {
+                let currentTotal = 0;
+                const newChartData = [];
+
+                parameters.forEach(param => {
+                    let val;
+                    // Sync logic between range and number input
+                    if (sourceEvent && sourceEvent.target.id === `num-${param.id}`) {
+                        val = parseInt(numInputElements[param.id].value) || 0;
+                        if (val > param.max) val = param.max; // cap at max
+                        if (val < 0) val = 0; // cap at min
+                        inputElements[param.id].value = val;
+                        numInputElements[param.id].value = val; // reflect capped value immediately
+                    } else {
+                        val = parseInt(inputElements[param.id].value) || 0;
+                        numInputElements[param.id].value = val;
+                    }
+
+                    // Map to 100% scale for chart
+                    newChartData.push((val / param.max) * 100);
+                    currentTotal += val;
+                });
+
+                // Update Total text
+                totalScoreEl.innerText = currentTotal;
+
+                // Update Award Category & Trophy Status
+                updateAwardCategory(currentTotal);
+
+                // Update Chart
+                radarChart.data.datasets[0].data = newChartData;
+                radarChart.update();
+            };
+
+            // Attach event listeners to sliders and number inputs
+            parameters.forEach(param => {
+                inputElements[param.id].addEventListener('input', updateDashboard);
+                numInputElements[param.id].addEventListener('input', updateDashboard);
+            });
+            
+            // Initial render call
+            updateDashboard();
+
+            // --- 5. PDF Generation ---
+            document.getElementById('btn-download').addEventListener('click', () => {
+                const candidateName = document.getElementById('candidateName').value.trim() || 'Candidate';
+                const element = document.getElementById('assessment-content');
+                
+                // Temporarily adjust styles for better PDF rendering
+                element.style.borderRadius = '0';
+                element.style.boxShadow = 'none';
+                element.style.border = 'none';
+
+                const opt = {
+                    margin:       0.5,
+                    filename:     `${candidateName.replace(/\s+/g, '_')}_Evaluation.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#1c1c1e' },
+                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
+                };
+
+                html2pdf().set(opt).from(element).save().then(() => {
+                    // Restore styles
+                    element.style.borderRadius = '';
+                    element.style.boxShadow = '';
+                    element.style.border = '';
+                    showToast('PDF downloaded successfully!');
+                });
+            });
+
+            // --- 5.1 Modal Management ---
+            const configModal = document.getElementById('config-modal');
+            document.getElementById('btn-config').addEventListener('click', () => {
+                configModal.classList.remove('hidden');
+            });
+            document.getElementById('btn-close-modal').addEventListener('click', () => {
+                configModal.classList.add('hidden');
+            });
+            document.getElementById('btn-save-modal').addEventListener('click', () => {
+                configModal.classList.add('hidden');
+                showToast('Endpoint URL updated for this session.');
+            });
+
+            // --- 6. Form Submission (Mocked to Google Sheets / App Script) ---
+            document.getElementById('btn-submit').addEventListener('click', async () => {
+                const btn = document.getElementById('btn-submit');
+                const btnText = document.getElementById('btn-submit-text');
+                const loader = document.getElementById('btn-submit-loader');
+
+                // Basic validation
+                const candidateName = document.getElementById('candidateName').value.trim();
+                const evaluatorName = document.getElementById('evaluatorName').value.trim();
+
+                if (!candidateName || !evaluatorName) {
+                    showToast('Please fill in Candidate and Evaluator names.', 'error');
+                    return;
+                }
+
+                // Prepare Payload
+                const payload = {
+                    timestamp: new Date().toISOString(),
+                    candidateName: candidateName,
+                    evaluatorName: evaluatorName,
+                    comments: document.getElementById('comments').value.trim(),
+                    scores: {},
+                    tier: categoryBadge.textContent.trim(),
+                    highlyRecommended: !recommendedBadge.classList.contains('hidden')
+                };
+                
+                let total = 0;
+                parameters.forEach(param => {
+                    const score = parseInt(inputElements[param.id].value);
+                    payload.scores[param.id] = score;
+                    total += score;
+                });
+                payload.totalScore = total;
+
+                // UI Loading state
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+                btnText.innerText = 'Submitting...';
+                loader.classList.remove('hidden');
+
+                // Retrieve Script URL from config modal or fall back to default placeholder
+                const scriptUrlInput = document.getElementById('googleScriptUrl');
+                const GOOGLE_SCRIPT_URL = scriptUrlInput ? scriptUrlInput.value.trim() : 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec'; 
+
+                try {
+                    // Simulation mode if placeholder is still set
+                    if (GOOGLE_SCRIPT_URL.includes('YOUR_SCRIPT_ID')) {
+                        await new Promise(resolve => setTimeout(resolve, 1200));
+                        showToast('Assessment saved! (Simulation mode - configure URL via Sheet Webhook button)');
+                    } else {
+                        // Real fetch request to Google Apps Script Web App
+                        await fetch(GOOGLE_SCRIPT_URL, {
+                            method: 'POST',
+                            mode: 'no-cors', // Standard for unauthenticated Google Apps Script web app requests
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                        // Because of no-cors, response is opaque. We assume success if no network crash occurred.
+                        showToast('Assessment successfully submitted to Google Sheets!');
+                    }
+
+                } catch (error) {
+                    console.error('Submission Error:', error);
+                    showToast('Failed to submit. Check console or URL.', 'error');
+                } finally {
+                    // Restore UI state
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                    btnText.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Submit Assessment';
+                    loader.classList.add('hidden');
+                }
+            });
+
+            // --- Custom Toast Notification System (No Alert allowed) ---
+            let toastTimeout;
+            function showToast(message, type = 'success') {
+                const toast = document.getElementById('toast');
+                const toastMessage = document.getElementById('toast-message');
+                const icon = toast.querySelector('i');
+                
+                toastMessage.innerText = message;
+                
+                // Style based on type (Using Apple style colors)
+                if (type === 'error') {
+                    icon.className = 'fas fa-exclamation-triangle text-2xl text-[#ff453a]';
+                } else {
+                    icon.className = 'fas fa-check-circle text-2xl text-[#32d74b]';
+                }
+
+                // Show
+                toast.classList.remove('translate-y-[-150%]', 'opacity-0');
+                
+                // Hide after 3 seconds
+                clearTimeout(toastTimeout);
+                toastTimeout = setTimeout(() => {
+                    toast.classList.add('translate-y-[-150%]', 'opacity-0');
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>
